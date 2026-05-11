@@ -1,5 +1,6 @@
 name = "facebook-post-scheduler-pilot"
 main = "worker.mjs"
+account_id = "91bd2edde501910ea030a9b494b3c4e4"
 compatibility_date = "2026-05-11"
 
 [assets]
