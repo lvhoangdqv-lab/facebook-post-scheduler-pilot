@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Facebook Post Scheduler</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brandMark">F</div>
+        <div>
+          <p class="eyebrow">Publisher</p>
+          <h1>Page Studio</h1>
+        </div>
+      </div>
+
+      <nav>
+        <a class="active" href="#calendar"><span>▦</span> Lịch đăng</a>
+        <a href="#calendar" data-open-post-modal><span>＋</span> Soạn bài</a>
+        <a href="#import"><span>⇧</span> Nhập CSV</a>
+      </nav>
+
+      <section class="setupCard" aria-labelledby="setupTitle">
+        <div class="setupHeader">
+          <div>
+            <h2 id="setupTitle">Bắt đầu</h2>
+            <p><span id="setupDone">0</span> / 4</p>
+          </div>
+          <button id="dismissSetup" class="iconButton" type="button" title="Ẩn hướng dẫn">×</button>
+        </div>
+        <div class="progressTrack" aria-label="Tiến độ thiết lập">
+          <span id="setupProgress"></span>
+        </div>
+        <div class="setupList">
+          <button class="setupItem" type="button" data-setup-jump="#calendar" data-step="account">
+            <span class="checkIcon"></span>
+            <span>Tạo workspace</span>
+            <strong>›</strong>
+          </button>
+          <button class="setupItem" type="button" data-open-channel-modal data-step="channel">
+            <span class="checkIcon"></span>
+            <span>Kết nối kênh</span>
+            <strong>›</strong>
+          </button>
+          <button class="setupItem" type="button" data-setup-jump="#import" data-step="idea">
+            <span class="checkIcon"></span>
+            <span>Nhập kế hoạch</span>
+            <strong>›</strong>
+          </button>
+          <button class="setupItem" type="button" data-open-post-modal data-step="post">
+            <span class="checkIcon"></span>
+            <span>Tạo bài đầu tiên</span>
+            <strong>›</strong>
+          </button>
+        </div>
+        <p class="setupHelp">Cần hỗ trợ? <button type="button" data-open-channel-modal>Xem hướng dẫn</button></p>
+      </section>
+
+      <div class="channelPanel">
+        <div class="miniHead">
+          <strong>Kênh</strong>
+          <button type="button" title="Thêm kênh" data-open-channel-modal>＋</button>
+        </div>
+        <div id="channelList" class="channelList">
+        </div>
+      </div>
+
+      <div class="statusBox">
+        <span id="modeDot" class="dot"></span>
+        <div>
+          <strong id="modeTitle">Đang kiểm tra</strong>
+          <small id="modeText">Kết nối server...</small>
+        </div>
+      </div>
+
+      <section class="planCard">
+        <div>
+          <strong id="planTitle">Dùng thử</strong>
+          <small id="planText">Đang tính ngày dùng thử...</small>
+        </div>
+        <button id="upgradeBtn" class="ghost" type="button">20k/tháng</button>
+      </section>
+    </aside>
+
+    <main>
+      <section class="toolbar heroBar">
+        <div>
+          <p class="eyebrow">Tháng này</p>
+          <h2>Lịch nội dung</h2>
+          <p>Lên lịch, import kế hoạch và theo dõi trạng thái đăng bài cho Facebook Page.</p>
+        </div>
+        <div class="toolbarActions">
+          <button id="runSchedulerBtn" class="ghost" type="button" hidden>Run scheduler now</button>
+          <button id="connectChannelBtn" class="ghost" type="button" data-open-channel-modal>Kết nối kênh</button>
+          <button id="refreshBtn" class="ghost iconOnly" type="button" title="Làm mới" aria-label="Làm mới">↻</button>
+          <button id="openPostModalBtn" class="primaryLink" type="button" data-open-post-modal>Tạo bài</button>
+        </div>
+      </section>
+
+      <section id="mockBanner" class="mockBanner" hidden>
+        <strong>Đang ở chế độ giả lập.</strong>
+        <span>Bài đến giờ sẽ đổi trạng thái trong hệ thống, nhưng chưa đăng lên Facebook thật.</span>
+        <button type="button" data-open-channel-modal>Cách bật đăng thật</button>
+      </section>
+
+      <section class="metricStrip" aria-label="Tổng quan lịch đăng">
+        <article>
+          <span>Tất cả</span>
+          <strong id="totalCount">0</strong>
+        </article>
+        <article>
+          <span>Đã lên lịch</span>
+          <strong id="scheduledCount">0</strong>
+        </article>
+        <article>
+          <span id="publishedMetricLabel">Đã giả lập đăng</span>
+          <strong id="publishedCount">0</strong>
+        </article>
+        <article>
+          <span>Cần xử lý</span>
+          <strong id="failedCount">0</strong>
+        </article>
+      </section>
+
+      <section id="calendar" class="panel calendarPanel">
+        <div class="calendarHeader">
+          <div class="calendarTitle">
+            <h3>Lịch bài đăng</h3>
+            <p id="summaryText">Chưa có dữ liệu.</p>
+          </div>
+          <div class="monthControls" aria-label="Điều hướng tháng">
+            <button id="prevMonthBtn" class="ghost" type="button">‹</button>
+            <strong id="currentMonthLabel">Tháng này</strong>
+            <button id="nextMonthBtn" class="ghost" type="button">›</button>
+          </div>
+        </div>
+        <div class="calendarToolbar">
+          <div class="segmented" aria-label="Chế độ xem">
+            <button type="button" data-view="queue">Danh sách</button>
+            <button class="selected" type="button" data-view="month">Lịch tháng</button>
+          </div>
+          <div class="filterGroup">
+            <select id="statusFilter" aria-label="Lọc trạng thái">
+              <option value="all">Tất cả trạng thái</option>
+              <option value="draft">Bản nháp</option>
+              <option value="scheduled">Đã lên lịch</option>
+              <option value="mock_published">Đã giả lập đăng</option>
+              <option value="published">Đã đăng</option>
+              <option value="failed">Lỗi</option>
+            </select>
+          </div>
+        </div>
+        <div id="monthGrid" class="monthGrid" aria-label="Lịch tháng"></div>
+        <div id="postList" class="postList"></div>
+      </section>
+
+      <section id="import" class="panel importPanel">
+        <div class="sectionHead">
+          <h3>Nhập CSV</h3>
+          <p>Cột hỗ trợ: caption, scheduledAt, pageId, imageUrl, status. Page ID phải là số, ảnh cần là direct image URL.</p>
+        </div>
+        <button id="csvDropzone" class="csvDropzone" type="button">
+          <strong>Kéo thả file .csv vào đây</strong>
+          <span>hoặc bấm để chọn file, rồi xem preview trước khi nhập vào lịch.</span>
+          <input id="csvFileInput" type="file" accept=".csv,text/csv" hidden />
+        </button>
+        <textarea id="csvInput" rows="7" spellcheck="false" placeholder="caption,scheduledAt,pageId,imageUrl&#10;&quot;Bài đầu tháng&quot;,&quot;2026-05-12T09:00&quot;,&quot;123456789&quot;,&quot;https://example.com/a.jpg&quot;"></textarea>
+        <div id="csvPreview" class="csvPreview" hidden></div>
+        <div class="actions">
+          <button id="importBtn" type="button">Nhập bài hợp lệ</button>
+          <button id="sampleBtn" class="ghost" type="button">Điền mẫu</button>
+          <button id="downloadSampleBtn" class="ghost" type="button">Tải file mẫu</button>
+        </div>
+      </section>
+    </main>
+
+    <template id="postTemplate">
+      <article class="postCard">
+        <div class="postTime">
+          <strong class="day"></strong>
+          <span class="month"></span>
+        </div>
+        <div class="postBody">
+          <div class="postTop">
+            <span class="badge"></span>
+            <time></time>
+          </div>
+          <p class="caption"></p>
+          <div class="meta"></div>
+          <div class="error"></div>
+        </div>
+        <div class="cardActions">
+          <button class="deleteBtn" type="button" title="Xóa bài">Xóa</button>
+        </div>
+      </article>
+    </template>
+
+    <div id="channelModal" class="modalOverlay" hidden>
+      <section class="channelModal" role="dialog" aria-modal="true" aria-labelledby="channelModalTitle">
+        <button id="closeChannelModal" class="modalClose" type="button" title="Đóng">×</button>
+        <div class="modalHead">
+          <p class="eyebrow">Kênh đăng</p>
+          <h2 id="channelModalTitle">Kết nối kênh mới</h2>
+          <p>Chọn nền tảng muốn chuẩn bị. Facebook Page là kênh có thể nối Graph API đầu tiên trong MVP này.</p>
+        </div>
+        <div id="channelOptions" class="channelOptions"></div>
+        <form id="connectForm" class="connectForm" hidden>
+          <div class="sectionHead">
+            <h3 id="connectTitle">Kết nối Facebook</h3>
+            <p id="connectCopy">Nhập Page ID để app ghi nhớ kênh. Token thật sẽ cấu hình bằng biến môi trường khi đăng thật.</p>
+          </div>
+          <div class="grid2">
+            <label>
+              Tên hiển thị
+              <input name="name" placeholder="Facebook Page" />
+            </label>
+            <label>
+              Page ID / ID kênh
+              <input name="handle" placeholder="1234567890" />
+            </label>
+          </div>
+          <p class="formMessage">MVP chỉ lưu thông tin channel cục bộ trong trình duyệt.</p>
+          <div class="actions">
+            <button type="submit">Lưu channel</button>
+            <button id="backToChannels" class="ghost" type="button">Chọn kênh khác</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div id="postModal" class="modalOverlay" hidden>
+      <section class="postModal" role="dialog" aria-modal="true" aria-labelledby="postModalTitle">
+        <header class="postModalTop">
+          <div class="postTitleGroup">
+          <h2 id="postModalTitle">Tạo bài</h2>
+            <button id="tagsBtn" class="tagButton" type="button">Nhãn⌄</button>
+          </div>
+          <div class="postTopActions">
+            <button id="templatesBtn" class="textButton" type="button">Mẫu nội dung</button>
+            <button id="aiAssistantBtn" class="textButton" type="button">Trợ lý AI</button>
+            <button id="previewToggleBtn" class="previewToggle" type="button">Xem trước</button>
+            <button id="closePostModal" class="plainClose" type="button" title="Đóng">×</button>
+          </div>
+        </header>
+        <div id="composerDrawer" class="composerDrawer" hidden></div>
+
+        <form id="postForm" class="postComposer">
+          <div class="postEditor">
+            <div class="channelAvatarRow">
+              <span class="avatar">fb</span>
+              <strong>Facebook Page</strong>
+            </div>
+            <div class="editorShell">
+              <div class="formatRow">
+                <span class="avatar smallAvatar">fb</span>
+                <label><input type="radio" name="format" value="post" checked /> Bài viết</label>
+                <label><input type="radio" name="format" value="reel" /> Reel</label>
+                <label><input type="radio" name="format" value="story" /> Tin</label>
+              </div>
+              <textarea name="caption" rows="10" placeholder="Bắt đầu viết hoặc dùng mẫu nội dung" required></textarea>
+              <button id="uploadDrop" class="uploadDrop" type="button">
+                <span>▧</span>
+                <strong>Kéo thả ảnh</strong>
+                <small>hoặc dán URL ảnh bên dưới</small>
+              </button>
+              <input id="imageFileInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+              <div class="composerTools">
+                <button type="button" data-tool="media" title="Hiện ô link ảnh">＋</button>
+                <button type="button" data-tool="schedule" title="Tới phần lịch">⌄</button>
+                <button type="button" data-tool="emoji" title="Chèn emoji">☺</button>
+                <button type="button" data-tool="hashtag" title="Chèn hashtag">#</button>
+                <button type="button" data-tool="shortlink" title="Chèn CTA">⌘</button>
+              </div>
+              <div class="grid2 postFields">
+                <label>
+                  Thời điểm đăng
+                  <input name="scheduledAt" type="datetime-local" required />
+                </label>
+                <label>
+                  Facebook Page ID
+                  <input name="pageId" placeholder="Để trống nếu dùng env FB_PAGE_ID" />
+                </label>
+              </div>
+              <label id="imageUrlField">
+                Link ảnh
+                <input name="imageUrl" type="url" placeholder="https://..." />
+              </label>
+              <label>
+                Bình luận đầu tiên
+                <input name="firstComment" placeholder="Nội dung bình luận" />
+              </label>
+              <p id="formMessage" class="formMessage" role="status"></p>
+            </div>
+          </div>
+
+          <aside class="facebookPreview" aria-label="Facebook preview">
+            <div class="previewHead">
+              <h3>Xem trước Facebook</h3>
+              <span>ⓘ</span>
+            </div>
+            <div class="previewEmpty" id="previewEmpty">
+              <div></div>
+              <p>Bản xem trước sẽ hiện ở đây</p>
+            </div>
+            <div class="previewCard livePreview" id="livePreview" hidden>
+              <div class="previewTop">
+                <span class="avatar">fb</span>
+                <div>
+                  <strong>Facebook Page</strong>
+                  <small>Bản xem trước</small>
+                </div>
+              </div>
+              <p id="previewCaption">Nội dung bài đăng sẽ hiển thị ở đây.</p>
+              <div id="previewMedia" class="previewMedia">Ảnh</div>
+              <div class="previewStats">
+                <span>Thích</span>
+                <span>Bình luận</span>
+                <span>Chia sẻ</span>
+              </div>
+            </div>
+          </aside>
+
+          <footer class="postModalFooter">
+            <label class="createAnother">
+              <input name="createAnother" type="checkbox" />
+              Tạo tiếp
+            </label>
+            <button id="saveDraftBtn" class="textButton" type="button">Lưu nháp</button>
+            <span class="footerSpacer"></span>
+            <button id="deleteFromEditorBtn" class="dangerGhost" type="button" hidden>Xóa bài</button>
+            <select name="scheduleMode" aria-label="Kiểu lên lịch">
+              <option value="Next Available">Khung giờ tiếp theo</option>
+              <option value="Custom Time">Tùy chỉnh giờ</option>
+            </select>
+            <button id="schedulePostBtn" type="submit">Lên lịch bài</button>
+          </footer>
+        </form>
+      </section>
+    </div>
+
+    <div id="paywallModal" class="modalOverlay" hidden>
+      <section class="paywallModal" role="dialog" aria-modal="true" aria-labelledby="paywallTitle">
+        <button id="closePaywallModal" class="plainClose" type="button" title="Đóng">×</button>
+        <p class="eyebrow">Page Studio Pro</p>
+        <h2 id="paywallTitle">Dùng thử miễn phí 7 ngày</h2>
+        <p>Hết trial, mở khóa đăng bài tự động với gói 20k/tháng. Bản này mới là mô phỏng thanh toán để test UI.</p>
+        <div class="priceBox">
+          <strong>20.000đ</strong>
+          <span>/ tháng</span>
+        </div>
+        <ul class="benefitList">
+          <li>Lên lịch không giới hạn trong tháng</li>
+          <li>Chỉnh sửa bài đã lên lịch</li>
+          <li>Nhập CSV hàng loạt</li>
+          <li>Chế độ giả lập và log trạng thái</li>
+        </ul>
+        <form id="proSignupForm" class="proSignupForm">
+          <label>
+            Họ tên
+            <input name="name" placeholder="Nguyễn Văn A" required />
+          </label>
+          <label>
+            Email hoặc Zalo
+            <input name="contact" placeholder="email@domain.com hoặc số Zalo" required />
+          </label>
+          <button id="mockPayBtn" type="submit">Kích hoạt 1 tháng - 20k</button>
+        </form>
+      </section>
+    </div>
+
+    <div id="deleteModal" class="modalOverlay" hidden>
+      <section class="confirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+        <h2 id="deleteTitle">Xóa bài đăng?</h2>
+        <p id="deleteCopy">Bài này sẽ bị xóa khỏi lịch. Thao tác này không thể hoàn tác.</p>
+        <div class="actions">
+          <button id="confirmDeleteBtn" class="dangerButton" type="button">Xóa bài</button>
+          <button id="cancelDeleteBtn" class="ghost" type="button">Hủy</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="loginModal" class="modalOverlay" hidden>
+      <section class="confirmModal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+        <h2 id="loginTitle">Admin login</h2>
+        <p>Use ADMIN_USERNAME and the password that matches ADMIN_PASSWORD_HASH. Facebook access tokens stay server-side.</p>
+        <form id="loginForm">
+          <label>
+            Username
+            <input name="username" autocomplete="username" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p id="loginMessage" class="formMessage" role="status"></p>
+          <button type="submit">Log in</button>
+        </form>
+      </section>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

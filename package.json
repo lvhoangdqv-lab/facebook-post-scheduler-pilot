@@ -1,0 +1,13 @@
+{
+  "name": "facebook-post-scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "hash-password": "node scripts/hash-password.mjs",
+    "worker:dev": "npx wrangler dev",
+    "worker:deploy": "npx wrangler deploy"
+  }
+}
