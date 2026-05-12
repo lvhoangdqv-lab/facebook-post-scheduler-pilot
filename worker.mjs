@@ -14,8 +14,21 @@ import { publishPost } from "./services/facebookPublisherEdge.mjs";
 
 const STALE_PUBLISHING_MS = 10 * 60 * 1000;
 const MAX_JSON_BYTES = 512 * 1024;
-const DEFAULT_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const DEFAULT_IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const DEFAULT_VIDEO_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
 const rateBuckets = new Map();
+
+const imageUploadTypes = new Map([
+  ["image/jpeg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/webp", ".webp"]
+]);
+
+const videoUploadTypes = new Map([
+  ["video/mp4", ".mp4"],
+  ["video/quicktime", ".mov"],
+  ["video/webm", ".webm"]
+]);
 
 function allowedOrigin(request, env) {
   const requestOrigin = new URL(request.url).origin;
@@ -102,12 +115,19 @@ function fbConfig(env) {
 
 function publicConfig(env, session) {
   const config = fbConfig(env);
+  const imageMaxBytes = Number(env.IMAGE_UPLOAD_MAX_BYTES || env.UPLOAD_MAX_BYTES || DEFAULT_IMAGE_UPLOAD_MAX_BYTES);
+  const videoMaxBytes = Number(env.VIDEO_UPLOAD_MAX_BYTES || DEFAULT_VIDEO_UPLOAD_MAX_BYTES);
   return {
     dryRun: config.dryRun,
     graphVersion: config.graphVersion,
     hasPageToken: Boolean(config.pageAccessToken),
     defaultPageId: config.pageId,
-    uploadMaxBytes: Number(env.UPLOAD_MAX_BYTES || DEFAULT_UPLOAD_MAX_BYTES),
+    defaultPageName: env.FB_PAGE_NAME || "",
+    uploadMaxBytes: imageMaxBytes,
+    mediaLimits: {
+      image: { maxBytes: imageMaxBytes, types: ["jpg", "jpeg", "png", "webp"] },
+      video: { maxBytes: videoMaxBytes, types: ["mp4", "mov", "webm"] }
+    },
     storageDriver: env.STORAGE_DRIVER || "supabase",
     auth: {
       authenticated: Boolean(session),
@@ -185,33 +205,57 @@ function assertWriteRate(request, kind) {
   return checkRate(`write:${ip}`, 120, 60 * 1000);
 }
 
-async function handleUpload(request, env, store) {
+function uploadRuleForFile(file, routeKind) {
+  const lowerName = String(file.name || "").toLowerCase();
+  const type = String(file.type || "").toLowerCase();
+  if (imageUploadTypes.has(type)) {
+    const validName = [".jpg", ".jpeg", ".png", ".webp"].some((value) => lowerName.endsWith(value));
+    if (!validName) throw new Error("Image extension must be jpg, jpeg, png, or webp.");
+    return {
+      kind: "image",
+      ext: imageUploadTypes.get(type),
+      maxBytesKey: "IMAGE_UPLOAD_MAX_BYTES",
+      fallbackMaxBytes: DEFAULT_IMAGE_UPLOAD_MAX_BYTES,
+      envFallbackKey: "UPLOAD_MAX_BYTES"
+    };
+  }
+  if (routeKind !== "image" && videoUploadTypes.has(type)) {
+    const validName = [".mp4", ".mov", ".webm"].some((value) => lowerName.endsWith(value));
+    if (!validName) throw new Error("Video extension must be mp4, mov, or webm.");
+    return {
+      kind: "video",
+      ext: videoUploadTypes.get(type),
+      maxBytesKey: "VIDEO_UPLOAD_MAX_BYTES",
+      fallbackMaxBytes: DEFAULT_VIDEO_UPLOAD_MAX_BYTES
+    };
+  }
+  if (routeKind === "image") throw new Error("Only jpg, jpeg, png, and webp images are allowed.");
+  throw new Error("Only jpg, jpeg, png, webp, mp4, mov, and webm media files are allowed.");
+}
+
+function uploadMaxBytesForRule(env, rule) {
+  return Number(env[rule.maxBytesKey] || (rule.envFallbackKey ? env[rule.envFallbackKey] : "") || rule.fallbackMaxBytes);
+}
+
+async function handleUpload(request, env, store, routeKind = "image") {
   if (!assertWriteRate(request, "upload")) return json({ error: "Upload rate limit exceeded." }, 429, request, env);
   const form = await request.formData();
-  const file = form.get("image");
-  if (!(file instanceof File)) throw new Error("Upload field must be named image.");
+  const file = form.get("media") || form.get("image") || form.get("video");
+  if (!(file instanceof File)) throw new Error("Upload field must be named media.");
 
-  const maxBytes = Number(env.UPLOAD_MAX_BYTES || DEFAULT_UPLOAD_MAX_BYTES);
-  if (file.size > maxBytes) throw new Error("Image is larger than the upload limit.");
-  const allowedTypes = new Map([
-    ["image/jpeg", ".jpg"],
-    ["image/png", ".png"],
-    ["image/webp", ".webp"]
-  ]);
-  const lowerName = String(file.name || "").toLowerCase();
-  const ext = allowedTypes.get(file.type);
-  if (!ext || ![".jpg", ".jpeg", ".png", ".webp"].some((value) => lowerName.endsWith(value))) {
-    throw new Error("Only jpg, jpeg, png, and webp images are allowed.");
-  }
+  const rule = uploadRuleForFile(file, routeKind);
+  const maxBytes = uploadMaxBytesForRule(env, rule);
+  if (file.size > maxBytes) throw new Error(`${rule.kind === "video" ? "Video" : "Image"} is larger than the upload limit.`);
+  if (!file.size) throw new Error("Uploaded file is empty.");
 
-  const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}${ext}`;
+  const path = `${rule.kind}s/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}${rule.ext}`;
   const url = await uploadToSupabaseStorage(env, {
     path,
     bytes: await file.arrayBuffer(),
     contentType: file.type
   });
-  await store.audit("upload_image", { path, size: file.size, type: file.type }, request);
-  return json({ url, path, size: file.size, mimeType: file.type }, 201, request, env);
+  await store.audit(`upload_${rule.kind}`, { path, size: file.size, type: file.type }, request);
+  return json({ url, path, size: file.size, mimeType: file.type, kind: rule.kind, mediaType: rule.kind }, 201, request, env);
 }
 
 async function handleApi(request, env) {
@@ -289,7 +333,11 @@ async function handleApi(request, env) {
   }
 
   if (path === "/api/uploads/image" && request.method === "POST") {
-    return handleUpload(request, env, store);
+    return handleUpload(request, env, store, "image");
+  }
+
+  if (path === "/api/uploads/media" && request.method === "POST") {
+    return handleUpload(request, env, store, "media");
   }
 
   if (path === "/api/export/posts.json" && request.method === "GET") {

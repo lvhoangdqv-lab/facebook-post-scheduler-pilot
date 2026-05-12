@@ -159,7 +159,7 @@
       <section id="import" class="panel importPanel">
         <div class="sectionHead">
           <h3>Nhập CSV</h3>
-          <p>Cột hỗ trợ: caption, scheduledAt, pageId, imageUrl, status. Page ID phải là số, ảnh cần là direct image URL.</p>
+          <p>Cột hỗ trợ: caption, scheduledAt, pageId, imageUrl, status. Page ID phải là số, media cần là URL trực tiếp hoặc upload trong composer.</p>
         </div>
         <button id="csvDropzone" class="csvDropzone" type="button">
           <strong>Kéo thả file .csv vào đây</strong>
@@ -235,12 +235,12 @@
         <header class="postModalTop">
           <div class="postTitleGroup">
           <h2 id="postModalTitle">Tạo bài</h2>
-            <button id="tagsBtn" class="tagButton" type="button">Nhãn⌄</button>
+            <button id="tagsBtn" class="tagButton" type="button" data-value="">Nhãn⌄ <span class="infoTip" tabindex="0" data-tip="Gắn nhãn nội bộ để lọc/nhớ mục đích bài. Nhãn không được đăng lên Facebook.">i</span></button>
           </div>
           <div class="postTopActions">
-            <button id="templatesBtn" class="textButton" type="button">Mẫu nội dung</button>
-            <button id="aiAssistantBtn" class="textButton" type="button">Trợ lý AI</button>
-            <button id="previewToggleBtn" class="previewToggle" type="button">Xem trước</button>
+            <button id="templatesBtn" class="textButton" type="button">Mẫu nội dung <span class="infoTip" tabindex="0" data-tip="Mở các mẫu caption có sẵn. Bấm một mẫu để chèn vào ô nội dung.">i</span></button>
+            <button id="aiAssistantBtn" class="textButton" type="button">Trợ lý AI <span class="infoTip" tabindex="0" data-tip="Chèn gợi ý nội dung mẫu. Bản pilot chưa gọi AI thật.">i</span></button>
+            <button id="previewToggleBtn" class="previewToggle" type="button">Xem trước <span class="infoTip" tabindex="0" data-tip="Ẩn/hiện khung mô phỏng bài viết Facebook bên phải.">i</span></button>
             <button id="closePostModal" class="plainClose" type="button" title="Đóng">×</button>
           </div>
         </header>
@@ -258,37 +258,38 @@
                 <label><input type="radio" name="format" value="post" checked /> Bài viết</label>
                 <label><input type="radio" name="format" value="reel" /> Reel</label>
                 <label><input type="radio" name="format" value="story" /> Tin</label>
+                <span class="infoTip" tabindex="0" data-tip="Bài viết đăng text/ảnh. Reel/Tin hiện lưu lịch và xem trước video trong pilot; đăng thật video cần API Reels/Stories riêng.">i</span>
               </div>
               <textarea name="caption" rows="10" placeholder="Bắt đầu viết hoặc dùng mẫu nội dung" required></textarea>
               <button id="uploadDrop" class="uploadDrop" type="button">
                 <span>▧</span>
-                <strong>Kéo thả ảnh</strong>
-                <small>hoặc dán URL ảnh bên dưới</small>
+                <strong>Kéo thả ảnh/video</strong>
+                <small id="uploadLimitText">Ảnh 5MB, video 50MB</small>
               </button>
-              <input id="imageFileInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+              <input id="mediaFileInput" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" hidden />
               <div class="composerTools">
-                <button type="button" data-tool="media" title="Hiện ô link ảnh">＋</button>
-                <button type="button" data-tool="schedule" title="Tới phần lịch">⌄</button>
-                <button type="button" data-tool="emoji" title="Chèn emoji">☺</button>
-                <button type="button" data-tool="hashtag" title="Chèn hashtag">#</button>
-                <button type="button" data-tool="shortlink" title="Chèn CTA">⌘</button>
+                <button type="button" data-tool="media" title="Hiện ô link media" aria-label="Hiện ô link media">＋<span class="infoTip" tabindex="0" data-tip="Đi tới ô Link media để dán URL ảnh/video công khai nếu không upload file.">i</span></button>
+                <button type="button" data-tool="schedule" title="Tới phần lịch" aria-label="Tới phần lịch">⌄<span class="infoTip" tabindex="0" data-tip="Đi tới ô chọn ngày giờ đăng bài.">i</span></button>
+                <button type="button" data-tool="emoji" title="Chèn emoji" aria-label="Chèn emoji">☺<span class="infoTip" tabindex="0" data-tip="Chèn nhanh một emoji vào caption tại vị trí con trỏ.">i</span></button>
+                <button type="button" data-tool="hashtag" title="Chèn hashtag" aria-label="Chèn hashtag">#<span class="infoTip" tabindex="0" data-tip="Chèn cụm hashtag mẫu để bạn sửa lại cho đúng chiến dịch.">i</span></button>
+                <button type="button" data-tool="shortlink" title="Chèn CTA" aria-label="Chèn CTA">⌘<span class="infoTip" tabindex="0" data-tip="Chèn lời kêu gọi hành động mẫu ở cuối caption.">i</span></button>
               </div>
               <div class="grid2 postFields">
                 <label>
-                  Thời điểm đăng
+                  <span class="labelWithInfo">Thời điểm đăng <span class="infoTip" tabindex="0" data-tip="Chọn giờ theo máy của bạn. App sẽ lưu thành ISO để scheduler đăng khi đến giờ.">i</span></span>
                   <input name="scheduledAt" type="datetime-local" required />
                 </label>
                 <label>
-                  Facebook Page ID
-                  <input name="pageId" placeholder="Để trống nếu dùng env FB_PAGE_ID" />
+                  <span class="labelWithInfo">Facebook Page <span class="infoTip" tabindex="0" data-tip="Chọn Page đã cấu hình trong Cloudflare Worker. Token nằm server-side, không hiển thị trong trình duyệt.">i</span></span>
+                  <select id="pageIdSelect" name="pageId"></select>
                 </label>
               </div>
               <label id="imageUrlField">
-                Link ảnh
-                <input name="imageUrl" type="url" placeholder="https://..." />
+                <span class="labelWithInfo">Link media <span class="infoTip" tabindex="0" data-tip="Dán URL trực tiếp của ảnh/video công khai. Không dùng link Google Drive dạng xem. Có thể bỏ trống nếu đã upload file ở trên.">i</span></span>
+                <input name="imageUrl" type="text" placeholder="https://... hoặc URL sau khi upload" />
               </label>
               <label>
-                Bình luận đầu tiên
+                <span class="labelWithInfo">Bình luận đầu tiên <span class="infoTip" tabindex="0" data-tip="Nội dung này sẽ được đăng thành comment đầu tiên sau khi bài đăng thật thành công. Có thể bỏ trống.">i</span></span>
                 <input name="firstComment" placeholder="Nội dung bình luận" />
               </label>
               <p id="formMessage" class="formMessage" role="status"></p>
@@ -325,15 +326,18 @@
           <footer class="postModalFooter">
             <label class="createAnother">
               <input name="createAnother" type="checkbox" />
-              Tạo tiếp
+              Tạo tiếp <span class="infoTip" tabindex="0" data-tip="Sau khi bấm Lên lịch bài, modal sẽ giữ mở và làm trống nội dung để bạn tạo bài kế tiếp.">i</span>
             </label>
-            <button id="saveDraftBtn" class="textButton" type="button">Lưu nháp</button>
+            <button id="saveDraftBtn" class="textButton" type="button">Lưu nháp <span class="infoTip" tabindex="0" data-tip="Lưu vào hệ thống với trạng thái bản nháp. Scheduler sẽ không đăng bản nháp.">i</span></button>
             <span class="footerSpacer"></span>
             <button id="deleteFromEditorBtn" class="dangerGhost" type="button" hidden>Xóa bài</button>
+            <span class="selectWithInfo">
             <select name="scheduleMode" aria-label="Kiểu lên lịch">
               <option value="Next Available">Khung giờ tiếp theo</option>
               <option value="Custom Time">Tùy chỉnh giờ</option>
             </select>
+            <span class="infoTip" tabindex="0" data-tip="Bản pilot vẫn lấy giờ từ ô Thời điểm đăng. Trường này lưu ý định lên lịch để mở rộng sau.">i</span>
+            </span>
             <button id="schedulePostBtn" type="submit">Lên lịch bài</button>
           </footer>
         </form>

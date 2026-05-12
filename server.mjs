@@ -33,13 +33,22 @@ const mimeTypes = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
-  ".webp": "image/webp"
+  ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm"
 };
 
-const uploadTypes = new Map([
+const imageUploadTypes = new Map([
   ["image/jpeg", ".jpg"],
   ["image/png", ".png"],
   ["image/webp", ".webp"]
+]);
+
+const videoUploadTypes = new Map([
+  ["video/mp4", ".mp4"],
+  ["video/quicktime", ".mov"],
+  ["video/webm", ".webm"]
 ]);
 
 const store = createJsonStore({
@@ -132,9 +141,14 @@ function publicConfig(req) {
     graphVersion: config.graphVersion,
     hasPageToken: Boolean(config.pageAccessToken),
     defaultPageId: config.pageId,
+    defaultPageName: config.pageName,
     appBaseUrl: config.appBaseUrl,
     schedulerIntervalMs: config.schedulerIntervalMs,
     uploadMaxBytes: config.uploadMaxBytes,
+    mediaLimits: {
+      image: { maxBytes: config.uploadMaxBytes, types: ["jpg", "jpeg", "png", "webp"] },
+      video: { maxBytes: config.videoUploadMaxBytes, types: ["mp4", "mov", "webm"] }
+    },
     auth: authPayload(req),
     warnings: configValidation.warnings
   };
@@ -148,43 +162,61 @@ function normalizeError(error) {
   };
 }
 
-async function parseMultipartImage(req) {
+function uploadRuleFor(mimeType, filename, routeKind) {
+  const lowerName = String(filename || "").toLowerCase();
+  if (imageUploadTypes.has(mimeType)) {
+    if (![".jpg", ".jpeg", ".png", ".webp"].some((value) => lowerName.endsWith(value))) {
+      throw new Error("Image extension must be jpg, jpeg, png, or webp.");
+    }
+    return { kind: "image", ext: imageUploadTypes.get(mimeType), maxBytes: config.uploadMaxBytes };
+  }
+  if (routeKind !== "image" && videoUploadTypes.has(mimeType)) {
+    if (![".mp4", ".mov", ".webm"].some((value) => lowerName.endsWith(value))) {
+      throw new Error("Video extension must be mp4, mov, or webm.");
+    }
+    return { kind: "video", ext: videoUploadTypes.get(mimeType), maxBytes: config.videoUploadMaxBytes };
+  }
+  if (routeKind === "image") throw new Error("Only jpg, jpeg, png, and webp images are allowed.");
+  throw new Error("Only jpg, jpeg, png, webp, mp4, mov, and webm media files are allowed.");
+}
+
+async function parseMultipartMedia(req, routeKind = "image") {
   const contentType = req.headers["content-type"] || "";
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
   if (!boundaryMatch) throw new Error("Expected multipart/form-data upload.");
   const boundary = `--${boundaryMatch[1] || boundaryMatch[2]}`;
-  const raw = await readRawBody(req, config.uploadMaxBytes + 100_000);
+  const maxRequestBytes = Math.max(config.uploadMaxBytes, config.videoUploadMaxBytes) + 100_000;
+  const raw = await readRawBody(req, maxRequestBytes);
   const parts = raw.toString("binary").split(boundary).slice(1, -1);
 
   for (const part of parts) {
     const index = part.indexOf("\r\n\r\n");
     if (index === -1) continue;
     const headerText = part.slice(0, index);
-    const disposition = headerText.match(/content-disposition:[^\r\n]*name="image"[^\r\n]*filename="([^"]*)"/i);
+    const disposition = headerText.match(/content-disposition:[^\r\n]*name="(?:image|media|video)"[^\r\n]*filename="([^"]*)"/i);
     if (!disposition) continue;
     const typeMatch = headerText.match(/content-type:\s*([^\r\n]+)/i);
     const mimeType = (typeMatch?.[1] || "").trim().toLowerCase();
-    const ext = uploadTypes.get(mimeType) || extname(disposition[1]).toLowerCase();
-    if (![".jpg", ".jpeg", ".png", ".webp"].includes(ext) || !uploadTypes.has(mimeType)) {
-      throw new Error("Only jpg, jpeg, png, and webp images are allowed.");
-    }
+    const rule = uploadRuleFor(mimeType, disposition[1], routeKind);
     let bodyBinary = part.slice(index + 4);
     if (bodyBinary.endsWith("\r\n")) bodyBinary = bodyBinary.slice(0, -2);
     const buffer = Buffer.from(bodyBinary, "binary");
-    if (buffer.length > config.uploadMaxBytes) throw new Error("Image is larger than the upload limit.");
-    if (!buffer.length) throw new Error("Uploaded image is empty.");
-    const filename = `${Date.now()}-${randomUUID()}${ext === ".jpeg" ? ".jpg" : ext}`;
+    if (buffer.length > rule.maxBytes) throw new Error(`${rule.kind === "video" ? "Video" : "Image"} is larger than the upload limit.`);
+    if (!buffer.length) throw new Error("Uploaded file is empty.");
+    const filename = `${Date.now()}-${randomUUID()}${rule.ext === ".jpeg" ? ".jpg" : rule.ext}`;
     await mkdir(UPLOAD_DIR, { recursive: true });
     await writeFile(join(UPLOAD_DIR, filename), buffer);
     return {
       url: publicUploadUrlForFile(filename),
       filename,
       mimeType,
-      size: buffer.length
+      size: buffer.length,
+      kind: rule.kind,
+      mediaType: rule.kind
     };
   }
 
-  throw new Error("Upload field must be named image.");
+  throw new Error("Upload field must be named media.");
 }
 
 async function recoverPublishingOnStartup() {
@@ -337,7 +369,11 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === "/api/uploads/image" && req.method === "POST") {
-    return sendJson(res, 201, await parseMultipartImage(req));
+    return sendJson(res, 201, await parseMultipartMedia(req, "image"));
+  }
+
+  if (url.pathname === "/api/uploads/media" && req.method === "POST") {
+    return sendJson(res, 201, await parseMultipartMedia(req, "media"));
   }
 
   if (url.pathname === "/api/posts" && req.method === "GET") {

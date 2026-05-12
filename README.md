@@ -14,7 +14,7 @@ Do not use Vercel Hobby for paid customers. The production pilot path in this re
 - Frontend: static files in `public/`, deployed with Cloudflare Workers assets or Cloudflare Pages.
 - API: `worker.mjs` on Cloudflare Workers.
 - Database: Supabase Free Postgres.
-- Images: Supabase Storage bucket.
+- Media uploads: Supabase Storage bucket for images and pilot video drafts.
 - Scheduler: Cloudflare Cron Trigger calling Worker `scheduled()` every 5 minutes.
 - Facebook token: Cloudflare Worker secret only.
 
@@ -79,8 +79,11 @@ Optional/normal vars are in [wrangler.toml](</d:/codechoi/Tool đăng bài faceb
 STORAGE_DRIVER = "supabase"
 FB_DRY_RUN = "true"
 FB_GRAPH_VERSION = "v25.0"
+FB_PAGE_NAME = "Hợp Âm Hoang Dã"
 SUPABASE_STORAGE_BUCKET = "post-images"
 UPLOAD_MAX_BYTES = "5242880"
+IMAGE_UPLOAD_MAX_BYTES = "5242880"
+VIDEO_UPLOAD_MAX_BYTES = "52428800"
 ```
 
 Deploy:
@@ -131,7 +134,8 @@ The admin endpoint requires login + CSRF. The cron endpoint requires `CRON_SECRE
 - Facebook Page Access Token is never returned by API.
 - Supabase service role key is Worker-only.
 - No important data is stored in `localStorage`.
-- Uploads go to Supabase Storage, not filesystem.
+- Uploads go to Supabase Storage, not filesystem in the Worker.
+- Images are limited to jpg/jpeg/png/webp. Videos are limited to mp4/mov/webm for pilot drafts/previews.
 - SVG/HTML/JS uploads are rejected.
 - API responses do not include stack traces.
 - Security headers are set by the Worker.
@@ -150,7 +154,7 @@ The admin endpoint requires login + CSRF. The cron endpoint requires `CRON_SECRE
 - Cloudflare Worker URL is HTTPS.
 - Test unauthenticated `/api/posts` returns 401.
 - Test `/api/cron/tick` without bearer returns 401.
-- Test upload rejects SVG and oversized files.
+- Test upload rejects SVG, HTML/JS, wrong extensions, and oversized files.
 - Rotate token immediately if it was ever pasted into chat, frontend, browser storage, or Git.
 
 ## Rotate Keys/Tokens
@@ -185,17 +189,21 @@ Supabase backup options:
 2. Log in as admin.
 3. Create a text post scheduled a few minutes ahead.
 4. Upload a jpg/png/webp image.
-5. Confirm refresh keeps posts from Supabase.
-6. Trigger `POST /api/scheduler/tick` from the UI.
-7. Trigger `/api/cron/tick` with and without `CRON_SECRET`.
-8. Switch `FB_DRY_RUN=false` only after dry-run works.
-9. Test real Facebook text post.
-10. Test real Facebook photo post.
+5. Upload a small mp4/mov/webm video as a Reel/Tin draft while still in dry-run.
+6. Confirm refresh keeps posts from Supabase.
+7. Trigger `POST /api/scheduler/tick` from the UI.
+8. Trigger `/api/cron/tick` with and without `CRON_SECRET`.
+9. Switch `FB_DRY_RUN=false` only after dry-run works.
+10. Test real Facebook text post.
+11. Test real Facebook photo post.
+
+Real Facebook publishing in this pilot supports text posts and photo posts. Video upload is available for saving/previewing Reel/Tin drafts in dry-run, but real Reels/Stories publishing needs a separate Facebook video publishing flow before paid use.
 
 ## Common Limits
 
 - Cloudflare Workers Free has request limits; pilot traffic must stay small.
 - Supabase Free has database/storage limits.
+- Default upload limits: image 5MB, video 50MB. Keep videos short in the free pilot to avoid slow uploads and storage churn.
 - Cloudflare Cron is good for pilot scheduling, not a paid SLA.
 - Facebook publish requires a valid Page token and permissions such as `pages_manage_posts`.
 - Meta App Review may be required depending on how you obtain and use permissions.

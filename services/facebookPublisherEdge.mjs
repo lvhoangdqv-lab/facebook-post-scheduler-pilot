@@ -25,6 +25,14 @@ function normalizePublishResult(raw, firstComment) {
   };
 }
 
+function isVideoMediaUrl(value = "") {
+  try {
+    return [".mp4", ".mov", ".webm"].some((ext) => new URL(value).pathname.toLowerCase().endsWith(ext));
+  } catch {
+    return false;
+  }
+}
+
 async function postFirstComment({ config, postId, message }) {
   if (!message || !postId) return null;
   const body = new URLSearchParams();
@@ -50,6 +58,9 @@ export async function publishPost(post, config) {
 
   let raw;
   if (post.imageUrl) {
+    if (isVideoMediaUrl(post.imageUrl)) {
+      throw new Error("Video/Reels/Stories publishing is not enabled in this pilot. Use dry-run for video drafts or publish text/photo posts.");
+    }
     const body = new URLSearchParams();
     body.set("access_token", config.pageAccessToken);
     body.set("url", post.imageUrl);

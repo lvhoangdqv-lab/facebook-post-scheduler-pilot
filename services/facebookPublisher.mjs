@@ -8,6 +8,8 @@ const imageMimeTypes = new Map([
   [".webp", "image/webp"]
 ]);
 
+const videoExtensions = new Set([".mp4", ".mov", ".webm"]);
+
 function graphUrl(config, path) {
   return `https://graph.facebook.com/${config.graphVersion}/${path}`;
 }
@@ -44,6 +46,17 @@ function localUploadPath(imageUrl, uploadDir) {
   return filePath;
 }
 
+function isVideoMediaUrl(value = "") {
+  try {
+    const pathname = value.startsWith("/uploads/")
+      ? value
+      : new URL(value).pathname;
+    return videoExtensions.has(extname(pathname).toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 async function postFirstComment({ config, postId, message }) {
   if (!message || !postId) return null;
   const body = new URLSearchParams();
@@ -69,6 +82,9 @@ export async function publishPost(post, { config, uploadDir }) {
 
   let raw;
   if (post.imageUrl) {
+    if (isVideoMediaUrl(post.imageUrl)) {
+      throw new Error("Video/Reels/Stories publishing is not enabled in this pilot. Use dry-run for video drafts or publish text/photo posts.");
+    }
     const body = new FormData();
     body.set("access_token", config.pageAccessToken);
     body.set("caption", post.caption);

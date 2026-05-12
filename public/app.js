@@ -12,6 +12,8 @@ const previewToggleBtn = document.querySelector("#previewToggleBtn");
 const composerDrawer = document.querySelector("#composerDrawer");
 const uploadDrop = document.querySelector("#uploadDrop");
 const imageUrlField = document.querySelector("#imageUrlField");
+const uploadLimitText = document.querySelector("#uploadLimitText");
+const pageIdSelect = document.querySelector("#pageIdSelect");
 const previewEmpty = document.querySelector("#previewEmpty");
 const livePreview = document.querySelector("#livePreview");
 const paywallModal = document.querySelector("#paywallModal");
@@ -72,7 +74,7 @@ const loginModal = document.querySelector("#loginModal");
 const loginForm = document.querySelector("#loginForm");
 const loginMessage = document.querySelector("#loginMessage");
 const runSchedulerBtn = document.querySelector("#runSchedulerBtn");
-const imageFileInput = document.querySelector("#imageFileInput");
+const mediaFileInput = document.querySelector("#mediaFileInput");
 
 let posts = [];
 let currentView = "month";
@@ -188,17 +190,26 @@ const channelTypes = [
 const templates = [
   {
     title: "Bán hàng nhẹ nhàng",
-    body: "Hôm nay bên mình có một gợi ý nhỏ cho bạn:\\n\\n[Điểm nổi bật]\\n[Giá trị khách nhận được]\\n\\nInbox page để được tư vấn nhanh nhé."
+    body: "Hôm nay bên mình có một gợi ý nhỏ cho bạn:\n\n[Điểm nổi bật]\n[Giá trị khách nhận được]\n\nInbox page để được tư vấn nhanh nhé."
   },
   {
     title: "Thông báo lịch",
-    body: "Lịch mới đã sẵn sàng.\\n\\nBạn có thể đặt trước khung giờ phù hợp trong hôm nay. Đội ngũ sẽ phản hồi từng tin nhắn sớm nhất có thể."
+    body: "Lịch mới đã sẵn sàng.\n\nBạn có thể đặt trước khung giờ phù hợp trong hôm nay. Đội ngũ sẽ phản hồi từng tin nhắn sớm nhất có thể."
   },
   {
     title: "Storytelling",
-    body: "Có một điều tụi mình nhận ra sau khi làm việc với khách hàng:\\n\\n[Insight]\\n\\nVì vậy, bài này dành cho những ai đang cần [kết quả mong muốn]."
+    body: "Có một điều tụi mình nhận ra sau khi làm việc với khách hàng:\n\n[Insight]\n\nVì vậy, bài này dành cho những ai đang cần [kết quả mong muốn]."
   }
 ];
+
+const defaultMediaLimits = {
+  image: { maxBytes: 5 * 1024 * 1024, label: "5MB", types: ["jpg", "jpeg", "png", "webp"] },
+  video: { maxBytes: 50 * 1024 * 1024, label: "50MB", types: ["mp4", "mov", "webm"] }
+};
+
+const imageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const videoTypes = new Set(["video/mp4", "video/quicktime", "video/webm"]);
+const videoExtensions = new Set([".mp4", ".mov", ".webm"]);
 
 function toLocalInputValue(date = new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
@@ -269,6 +280,54 @@ function formatShortTime(value) {
   }).format(new Date(value));
 }
 
+function formatBytes(bytes) {
+  const value = Number(bytes || 0);
+  if (value >= 1024 * 1024) return `${Math.round(value / 1024 / 1024)}MB`;
+  if (value >= 1024) return `${Math.round(value / 1024)}KB`;
+  return `${value}B`;
+}
+
+function mediaLimits() {
+  const configured = appConfig.mediaLimits || {};
+  return {
+    image: {
+      ...defaultMediaLimits.image,
+      ...(configured.image || {}),
+      maxBytes: Number(configured.image?.maxBytes || appConfig.uploadMaxBytes || defaultMediaLimits.image.maxBytes)
+    },
+    video: {
+      ...defaultMediaLimits.video,
+      ...(configured.video || {}),
+      maxBytes: Number(configured.video?.maxBytes || defaultMediaLimits.video.maxBytes)
+    }
+  };
+}
+
+function mediaKindFromFile(file) {
+  if (!file) return "";
+  if (imageTypes.has(file.type)) return "image";
+  if (videoTypes.has(file.type)) return "video";
+  return "";
+}
+
+function extensionFromUrl(value) {
+  try {
+    return new URL(value, window.location.origin).pathname.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] || "";
+  } catch {
+    return "";
+  }
+}
+
+function isVideoMediaUrl(value) {
+  return videoExtensions.has(extensionFromUrl(value));
+}
+
+function updateMediaLimitText() {
+  if (!uploadLimitText) return;
+  const limits = mediaLimits();
+  uploadLimitText.textContent = `Ảnh ${formatBytes(limits.image.maxBytes)}, video ${formatBytes(limits.video.maxBytes)}`;
+}
+
 function readCookie(name) {
   return document.cookie
     .split(";")
@@ -326,6 +385,8 @@ async function loadConfig() {
     : "Bài đến giờ sẽ gọi Facebook Graph API thật bằng token server-side.";
   runSchedulerBtn.hidden = !config.auth?.authenticated;
   publishedMetricLabel.textContent = config.dryRun ? "Đã giả lập đăng" : "Đã đăng thật";
+  updateMediaLimitText();
+  renderPageSelect(postForm.pageId?.value || "");
   renderChannels();
   renderSetup();
   renderPlan();
@@ -369,7 +430,7 @@ function renderPosts() {
     node.querySelector(".caption").textContent = post.caption;
     node.querySelector(".meta").textContent = [
       post.pageId ? `Page: ${post.pageId}` : "Chưa có Page ID",
-      post.imageUrl ? `Ảnh: ${post.imageUrl}` : "Không có ảnh",
+      post.imageUrl ? `Media: ${post.imageUrl}` : "Không có media",
       post.format ? `Format: ${post.format}` : "",
       post.tags ? `Tags: ${post.tags}` : ""
     ].filter(Boolean).join(" | ");
@@ -501,6 +562,34 @@ function renderChannels() {
   channelList.append(add);
 }
 
+function renderPageSelect(selectedValue = "") {
+  if (!pageIdSelect) return;
+  const currentValue = String(selectedValue || "").trim();
+  pageIdSelect.replaceChildren();
+
+  const pageName = appConfig.defaultPageName || "Facebook Page đã kết nối";
+  if (appConfig.defaultPageId) {
+    const option = document.createElement("option");
+    option.value = appConfig.defaultPageId;
+    option.textContent = `${pageName} (${appConfig.defaultPageId})`;
+    pageIdSelect.append(option);
+  } else {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Chưa cấu hình Page trong server";
+    pageIdSelect.append(option);
+  }
+
+  if (currentValue && currentValue !== appConfig.defaultPageId) {
+    const custom = document.createElement("option");
+    custom.value = currentValue;
+    custom.textContent = `Page đã lưu (${currentValue})`;
+    pageIdSelect.append(custom);
+  }
+
+  pageIdSelect.value = currentValue || appConfig.defaultPageId || "";
+}
+
 function renderSetup() {
   if (localStorage.getItem(storageKeys.setupDismissed) === "true") {
     setupCard.hidden = true;
@@ -559,7 +648,7 @@ function showPostPopover(post, anchor) {
   const meta = document.createElement("p");
   meta.textContent = [
     post.pageId ? `Page ID: ${post.pageId}` : "Chưa có Page ID",
-    post.imageUrl ? "Có ảnh" : "Không có ảnh"
+    post.imageUrl ? "Có media" : "Không có media"
   ].join(" | ");
   popover.append(status, title, time, meta);
 
@@ -765,7 +854,7 @@ function validateImportRow(row) {
         errors.push("Không dùng link Google Drive dạng view");
       }
     } catch {
-      errors.push("Link ảnh không hợp lệ");
+      errors.push("Link media không hợp lệ");
     }
   }
   if (!["draft", "scheduled", "publishing", "mock_published", "published", "failed"].includes(status)) {
@@ -831,13 +920,26 @@ postForm.scheduledAt.value = toLocalInputValue(new Date(Date.now() + 60 * 60 * 1
 
 function updatePreview() {
   const caption = postForm.caption.value.trim();
-  const imageUrl = postForm.imageUrl.value.trim();
-  const hasPreview = Boolean(caption || imageUrl);
+  const mediaUrl = postForm.imageUrl.value.trim();
+  const hasPreview = Boolean(caption || mediaUrl);
+  const isVideo = isVideoMediaUrl(mediaUrl);
   previewEmpty.hidden = hasPreview;
   livePreview.hidden = !hasPreview;
   previewCaption.textContent = caption || "Nội dung bài đăng sẽ hiển thị ở đây.";
-  previewMedia.classList.toggle("hasImage", Boolean(imageUrl));
-  previewMedia.style.backgroundImage = imageUrl ? `url("${imageUrl.replaceAll('"', "%22")}")` : "";
+  previewMedia.classList.toggle("hasImage", Boolean(mediaUrl && !isVideo));
+  previewMedia.classList.toggle("hasVideo", Boolean(mediaUrl && isVideo));
+  previewMedia.style.backgroundImage = mediaUrl && !isVideo ? `url("${mediaUrl.replaceAll('"', "%22")}")` : "";
+  previewMedia.replaceChildren();
+  if (mediaUrl && isVideo) {
+    const video = document.createElement("video");
+    video.src = mediaUrl;
+    video.controls = true;
+    video.muted = true;
+    video.playsInline = true;
+    previewMedia.append(video);
+  } else {
+    previewMedia.textContent = mediaUrl ? "Ảnh" : "Media";
+  }
 }
 
 postForm.caption.addEventListener("input", updatePreview);
@@ -850,7 +952,7 @@ function setFormMessage(message, type = "info") {
 
 function validateComposerInputs({ allowDraft = false } = {}) {
   const pageId = postForm.pageId.value.trim();
-  const imageUrl = postForm.imageUrl.value.trim();
+  const mediaUrl = postForm.imageUrl.value.trim();
   const scheduledAt = postForm.scheduledAt.value.trim();
   if (!allowDraft && !postForm.caption.value.trim()) {
     throw new Error("Caption không được để trống.");
@@ -858,16 +960,19 @@ function validateComposerInputs({ allowDraft = false } = {}) {
   if (pageId && !/^\d+$/.test(pageId)) {
     throw new Error("Page ID phải là số. Không dán URL Facebook Page vào ô này.");
   }
-  if (imageUrl && !imageUrl.startsWith("/uploads/")) {
+  if (mediaUrl && !mediaUrl.startsWith("/uploads/")) {
     let parsed;
     try {
-      parsed = new URL(imageUrl);
+      parsed = new URL(mediaUrl);
     } catch {
-      throw new Error("Link ảnh phải là URL hợp lệ.");
+      throw new Error("Link media phải là URL hợp lệ.");
     }
     if (parsed.hostname.includes("drive.google.com") && parsed.pathname.includes("/file/d/")) {
-      throw new Error("Không dùng link Google Drive dạng view. Hãy dùng direct public image URL.");
+      throw new Error("Không dùng link Google Drive dạng view. Hãy dùng direct public media URL hoặc upload file.");
     }
+  }
+  if (!appConfig.dryRun && mediaUrl && isVideoMediaUrl(mediaUrl)) {
+    throw new Error("Video/Reel/Tin trong pilot hiện hỗ trợ upload, preview và lưu lịch dry-run. Đăng thật Facebook hiện chỉ hỗ trợ text/ảnh.");
   }
   if (!allowDraft && Date.parse(scheduledAt) <= Date.now()) {
     throw new Error("Thời điểm đăng phải ở tương lai.");
@@ -880,7 +985,7 @@ async function savePostWithStatus(status) {
   const payload = Object.fromEntries(form.entries());
   payload.status = status;
   payload.scheduledTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  payload.tags = tagsBtn.textContent.replace("⌄", "").trim();
+  payload.tags = tagsBtn.dataset.value || "";
   if (status === "draft" && !payload.scheduledAt) {
     payload.scheduledAt = toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000));
   }
@@ -888,6 +993,18 @@ async function savePostWithStatus(status) {
     method: editingPostId ? "PUT" : "POST",
     body: JSON.stringify(payload)
   });
+}
+
+function setSelectedTag(tag = "") {
+  const value = String(tag || "").trim();
+  tagsBtn.dataset.value = value;
+  tagsBtn.textContent = value ? `${value} ⌄` : "Nhãn⌄";
+  const tip = document.createElement("span");
+  tip.className = "infoTip";
+  tip.tabIndex = 0;
+  tip.dataset.tip = "Gắn nhãn nội bộ để lọc/nhớ mục đích bài. Nhãn không được đăng lên Facebook.";
+  tip.textContent = "i";
+  tagsBtn.append(" ", tip);
 }
 
 function insertAtCursor(text) {
@@ -919,7 +1036,7 @@ function showDrawer(kind) {
         ${templates.map((template, index) => `
           <button type="button" data-template-index="${index}">
             <span>${template.title}</span>
-            <small>${template.body.split("\\n")[0]}</small>
+            <small>${template.body.split("\n")[0]}</small>
           </button>
         `).join("")}
       </div>
@@ -928,7 +1045,9 @@ function showDrawer(kind) {
       button.addEventListener("click", () => {
         postForm.caption.value = templates[Number(button.dataset.templateIndex)].body;
         updatePreview();
+        setFormMessage("Đã chèn mẫu nội dung. Bạn có thể sửa lại trước khi lên lịch.", "success");
         composerDrawer.hidden = true;
+        postForm.caption.focus();
       });
     });
     return;
@@ -938,6 +1057,7 @@ function showDrawer(kind) {
     composerDrawer.innerHTML = `
       <strong>Nhãn</strong>
       <div class="tagChips">
+        <button type="button" data-tag="">Bỏ nhãn</button>
         ${["Campaign tháng 5", "Bán hàng", "Chăm sóc khách", "Ưu đãi", "Repost"].map((tag) => `
           <button type="button" data-tag="${tag}">${tag}</button>
         `).join("")}
@@ -945,7 +1065,8 @@ function showDrawer(kind) {
     `;
     composerDrawer.querySelectorAll("[data-tag]").forEach((button) => {
       button.addEventListener("click", () => {
-        tagsBtn.textContent = `${button.dataset.tag} ⌄`;
+        setSelectedTag(button.dataset.tag);
+        setFormMessage(button.dataset.tag ? `Đã gắn nhãn "${button.dataset.tag}".` : "Đã bỏ nhãn.", "success");
         composerDrawer.hidden = true;
       });
     });
@@ -959,7 +1080,7 @@ function showDrawer(kind) {
       <button type="button" id="useAiSuggestion">Chèn gợi ý</button>
     `;
     composerDrawer.querySelector("#useAiSuggestion").addEventListener("click", () => {
-      insertAtCursor("Bạn đang cần một cách đơn giản hơn để lên kế hoạch nội dung?\\n\\nInbox page, mình gửi bạn gợi ý phù hợp trong hôm nay nhé.");
+      insertAtCursor("Bạn đang cần một cách đơn giản hơn để lên kế hoạch nội dung?\n\nInbox page, mình gửi bạn gợi ý phù hợp trong hôm nay nhé.");
       composerDrawer.hidden = true;
     });
   }
@@ -976,6 +1097,7 @@ function openPostModal(event) {
   setFormMessage("");
   postModal.hidden = false;
   document.body.classList.add("modalOpen");
+  renderPageSelect(postForm.pageId?.value || "");
   postForm.scheduledAt.value ||= toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000));
   postForm.caption.focus();
   updatePreview();
@@ -1001,9 +1123,10 @@ function openEditPost(id) {
   postForm.imageUrl.value = post.imageUrl || "";
   postForm.firstComment.value = post.firstComment || "";
   postForm.scheduleMode.value = post.scheduleMode || "Custom Time";
+  renderPageSelect(post.pageId || "");
   const formatInput = [...postForm.format].find((input) => input.value === (post.format || "post"));
   if (formatInput) formatInput.checked = true;
-  tagsBtn.textContent = post.tags ? `${post.tags} ⌄` : "Nhãn⌄";
+  setSelectedTag(post.tags || "");
   setFormMessage("Đang chỉnh sửa bài đã lên lịch.");
   postModal.hidden = false;
   document.body.classList.add("modalOpen");
@@ -1099,7 +1222,8 @@ postForm.addEventListener("submit", async (event) => {
     await savePostWithStatus("scheduled");
     postForm.reset();
     postForm.scheduledAt.value = toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000));
-    tagsBtn.textContent = "Nhãn⌄";
+    renderPageSelect("");
+    setSelectedTag("");
     updatePreview();
     await loadPosts();
     currentView = "month";
@@ -1110,6 +1234,7 @@ postForm.addEventListener("submit", async (event) => {
       postForm.caption.value = "";
       postForm.imageUrl.value = "";
       postForm.firstComment.value = "";
+      renderPageSelect("");
       updatePreview();
       postForm.caption.focus();
     } else {
@@ -1179,28 +1304,34 @@ previewToggleBtn.addEventListener("click", () => {
   document.querySelector(".facebookPreview").classList.toggle("collapsed");
 });
 
-async function uploadImageFile(file) {
+async function uploadMediaFile(file) {
   if (!file) return;
-  const allowed = ["image/jpeg", "image/png", "image/webp"];
-  if (!allowed.includes(file.type)) {
-    setFormMessage("Chỉ hỗ trợ jpg, png hoặc webp.", "error");
+  const kind = mediaKindFromFile(file);
+  if (!kind) {
+    setFormMessage("Chỉ hỗ trợ ảnh jpg/png/webp hoặc video mp4/mov/webm.", "error");
     return;
   }
-  if (appConfig.uploadMaxBytes && file.size > appConfig.uploadMaxBytes) {
-    setFormMessage(`Ảnh lớn hơn giới hạn ${Math.round(appConfig.uploadMaxBytes / 1024 / 1024)}MB.`, "error");
+  const limits = mediaLimits();
+  const limit = limits[kind]?.maxBytes || defaultMediaLimits[kind].maxBytes;
+  if (file.size > limit) {
+    setFormMessage(`${kind === "video" ? "Video" : "Ảnh"} lớn hơn giới hạn ${formatBytes(limit)}.`, "error");
     return;
   }
   const body = new FormData();
-  body.set("image", file);
-  setFormMessage("Đang upload ảnh...");
-  const uploaded = await request("/api/uploads/image", { method: "POST", body });
+  body.set("media", file);
+  setFormMessage(`Đang upload ${kind === "video" ? "video" : "ảnh"}...`);
+  const uploaded = await request("/api/uploads/media", { method: "POST", body });
   postForm.imageUrl.value = uploaded.url;
+  if (kind === "video" && postForm.format.value === "post") {
+    const reel = [...postForm.format].find((input) => input.value === "reel");
+    if (reel) reel.checked = true;
+  }
   updatePreview();
-  setFormMessage("Đã upload ảnh lên server.", "success");
+  setFormMessage(`Đã upload ${kind === "video" ? "video" : "ảnh"} lên server.`, "success");
 }
 
 uploadDrop.addEventListener("click", () => {
-  imageFileInput.click();
+  mediaFileInput.click();
 });
 uploadDrop.addEventListener("dragover", (event) => {
   event.preventDefault();
@@ -1211,18 +1342,18 @@ uploadDrop.addEventListener("drop", async (event) => {
   event.preventDefault();
   uploadDrop.classList.remove("dragging");
   try {
-    await uploadImageFile(event.dataTransfer.files[0]);
+    await uploadMediaFile(event.dataTransfer.files[0]);
   } catch (error) {
-    setFormMessage(error.message || "Upload ảnh thất bại.", "error");
+    setFormMessage(error.message || "Upload media thất bại.", "error");
   }
 });
-imageFileInput.addEventListener("change", async () => {
+mediaFileInput.addEventListener("change", async () => {
   try {
-    await uploadImageFile(imageFileInput.files[0]);
+    await uploadMediaFile(mediaFileInput.files[0]);
   } catch (error) {
-    setFormMessage(error.message || "Upload ảnh thất bại.", "error");
+    setFormMessage(error.message || "Upload media thất bại.", "error");
   } finally {
-    imageFileInput.value = "";
+    mediaFileInput.value = "";
   }
 });
 postForm.format.forEach((radio) => {
@@ -1230,7 +1361,9 @@ postForm.format.forEach((radio) => {
     const formatLabels = { post: "bài viết", reel: "reel", story: "tin" };
     const format = postForm.format.value;
     previewToggleBtn.textContent = `Xem trước ${formatLabels[format] || format}`;
-    setFormMessage(`Đang soạn định dạng ${formatLabels[format] || format}.`, "info");
+    const suffix = format === "post" ? "" : " Video hiện lưu lịch/preview trong pilot; đăng thật cần API video riêng.";
+    setFormMessage(`Đang soạn định dạng ${formatLabels[format] || format}.${suffix}`, "info");
+    updatePreview();
   });
 });
 document.querySelectorAll("[data-tool]").forEach((button) => {
@@ -1461,6 +1594,7 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
+setSelectedTag("");
 await loadConfig();
 updatePreview();
 await loadPosts();
