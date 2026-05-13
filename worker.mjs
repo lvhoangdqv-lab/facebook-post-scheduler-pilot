@@ -70,7 +70,36 @@ function text(body, status, contentType, request, env, headers = {}) {
 }
 
 function clientError(error) {
+  if (error?.code === "SUPABASE_INVALID_API_KEY") {
+    return {
+      code: "SUPABASE_INVALID_API_KEY",
+      error: "Supabase service role key đang sai hoặc bị paste nhầm. Hãy cập nhật lại SUPABASE_SERVICE_ROLE_KEY bằng key service_role/secret của đúng project Supabase rồi deploy lại."
+    };
+  }
+  if (error?.provider === "supabase") {
+    return {
+      code: "SUPABASE_STORAGE_ERROR",
+      error: "Không kết nối được Supabase. Kiểm tra SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY và quyền bảng/storage."
+    };
+  }
   return { error: error?.message || "Request failed." };
+}
+
+function storageHealthFromError(error) {
+  if (error?.code === "SUPABASE_INVALID_API_KEY") {
+    return {
+      ok: false,
+      provider: "supabase",
+      code: "SUPABASE_INVALID_API_KEY",
+      message: "SUPABASE_SERVICE_ROLE_KEY không hợp lệ hoặc không thuộc project này."
+    };
+  }
+  return {
+    ok: false,
+    provider: "supabase",
+    code: error?.code || "SUPABASE_STORAGE_ERROR",
+    message: "Không kiểm tra được Supabase. Xem lại SUPABASE_URL, key và schema."
+  };
 }
 
 function ipOf(request) {
@@ -320,12 +349,16 @@ async function handleApi(request, env) {
   const store = storeFor(env);
 
   if (path === "/api/health" && request.method === "GET") {
-    const posts = await store.listPosts();
-    const counts = posts.reduce((acc, post) => {
-      acc[post.status] = (acc[post.status] || 0) + 1;
-      return acc;
-    }, {});
-    return json({ ok: true, dryRun: fbConfig(env).dryRun, storage: "supabase", counts }, 200, request, env);
+    try {
+      const posts = await store.listPosts();
+      const counts = posts.reduce((acc, post) => {
+        acc[post.status] = (acc[post.status] || 0) + 1;
+        return acc;
+      }, {});
+      return json({ ok: true, dryRun: fbConfig(env).dryRun, storage: { ok: true, provider: "supabase" }, counts }, 200, request, env);
+    } catch (error) {
+      return json({ ok: false, dryRun: fbConfig(env).dryRun, storage: storageHealthFromError(error), counts: {} }, 200, request, env);
+    }
   }
 
   if (path === "/api/scheduler/tick" && request.method === "POST") {

@@ -352,8 +352,22 @@ async function request(path, options = {}) {
   const contentType = response.headers.get("content-type") || "";
   const data = contentType.includes("application/json") ? await response.json() : await response.text();
   if (response.status === 401) showLoginModal();
-  if (!response.ok) throw new Error(data.error || data || "Request failed");
+  if (!response.ok) {
+    const error = new Error(data.error || data || "Request failed");
+    if (data?.code) error.code = data.code;
+    throw error;
+  }
   return data;
+}
+
+function userFacingError(error, fallback = "Thao tác thất bại.") {
+  if (error?.code === "SUPABASE_INVALID_API_KEY") {
+    return "Supabase key đang sai nên chưa nhập CSV được. Cần cập nhật lại SUPABASE_SERVICE_ROLE_KEY bằng service_role/secret key của đúng project Supabase rồi deploy lại.";
+  }
+  if (error?.code === "SUPABASE_STORAGE_ERROR") {
+    return "Supabase đang lỗi cấu hình. Kiểm tra SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, schema và storage bucket.";
+  }
+  return error?.message || fallback;
 }
 
 function showLoginModal(message = "") {
@@ -1571,7 +1585,7 @@ importBtn.addEventListener("click", async () => {
       alert(`Đã nhập ${imported.length} dòng hợp lệ. ${previewRows.length - imported.length} dòng lỗi vẫn cần sửa.`);
     }
   } catch (error) {
-    alert(error.message || "Import thất bại.");
+    alert(userFacingError(error, "Import thất bại."));
   }
 });
 

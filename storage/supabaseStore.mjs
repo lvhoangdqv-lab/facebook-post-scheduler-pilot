@@ -65,7 +65,15 @@ async function supabaseFetch(env, path, init = {}) {
   const response = await fetch(`${base}${path}`, init);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Supabase request failed (${response.status}): ${text.slice(0, 300)}`);
+    const error = new Error(`Supabase request failed (${response.status}).`);
+    error.provider = "supabase";
+    error.status = response.status;
+    error.detail = text.slice(0, 300);
+    if (response.status === 401 && /Invalid API key/i.test(text)) {
+      error.code = "SUPABASE_INVALID_API_KEY";
+      error.message = "Supabase API key is invalid.";
+    }
+    throw error;
   }
   if (response.status === 204) return null;
   return response.json();
