@@ -46,8 +46,12 @@ jobs:
               echo "::error::SUPABASE_SERVICE_ROLE_KEY looks like a publishable/anon key. Use the service_role JWT or sb_secret_* key."
               exit 1
             fi
-            if [[ "$value" != eyJ* && "$value" != sb_secret_* ]]; then
-              echo "::error::SUPABASE_SERVICE_ROLE_KEY does not look like a Supabase service role/secret key."
+            if [[ "$value" == sb_secret_* ]]; then
+              echo "::error::This app uses Supabase REST/PostgREST and requires the legacy service_role JWT that starts with eyJ, not sb_secret_*."
+              exit 1
+            fi
+            if [[ "$value" != eyJ* ]]; then
+              echo "::error::SUPABASE_SERVICE_ROLE_KEY must be the legacy service_role JWT that starts with eyJ."
               exit 1
             fi
           }

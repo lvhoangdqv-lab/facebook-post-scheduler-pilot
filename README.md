@@ -73,6 +73,8 @@ npx wrangler secret put CRON_SECRET
 npx wrangler secret put FB_PAGE_ACCESS_TOKEN
 ```
 
+`SUPABASE_SERVICE_ROLE_KEY` must be the legacy `service_role` JWT from Supabase's "Legacy anon, service_role API keys" tab. It starts with `eyJ...`. Do not use `anon`, `sb_publishable_...`, or `sb_secret_...` for this Worker because the app calls Supabase REST/PostgREST directly.
+
 Optional/normal vars are in [wrangler.toml](</d:/codechoi/Tool đăng bài facebook/wrangler.toml>):
 
 ```toml
@@ -147,7 +149,7 @@ The admin endpoint requires login + CSRF. The cron endpoint requires `CRON_SECRE
 - `ADMIN_PASSWORD_HASH` generated with `scripts/hash-password.mjs`.
 - `SESSION_SECRET` is long and random.
 - `CRON_SECRET` is long and random.
-- `SUPABASE_SERVICE_ROLE_KEY` is only in Worker secrets.
+- `SUPABASE_SERVICE_ROLE_KEY` is the legacy `service_role` JWT and is only in Worker/GitHub secrets.
 - Supabase `posts` and `audit_logs` RLS are enabled.
 - No Supabase service role key in frontend bundle.
 - No Facebook token in frontend bundle, API responses, browser console, or logs.
